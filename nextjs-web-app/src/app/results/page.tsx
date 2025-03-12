@@ -75,7 +75,10 @@ function ResultsContent() {
   const [selectedStyle, setSelectedStyle] = useState<string | null>(null);
   const { theme } = useTheme();
   const { setTokens } = useAuth();
-
+  
+  // Track in-flight requests to prevent duplicates
+  const pendingRequests = useRef<Set<string>>(new Set());
+  
   // Reference for animation
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -122,6 +125,21 @@ function ResultsContent() {
       
       // Get the model type for this specific generation
       const modelType = modelTypes[index] || "fast";
+
+      // Create a unique request signature to prevent duplicate requests
+      const requestSignature = `${promptText}:${style}:${modelType}:${variations[index] || ''}:${index}`;
+      
+      // Skip if this exact request is already in progress
+      if (pendingRequests.current.has(requestSignature)) {
+        console.log(`Skipping duplicate request: ${requestSignature}`);
+        return;
+      }
+      
+      // Mark this request as in progress
+      pendingRequests.current.add(requestSignature);
+
+      // Generate a unique request ID
+      const requestId = `${Date.now()}-${Math.random().toString(36).substring(2, 15)}`;
       
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -131,47 +149,66 @@ function ResultsContent() {
           variation: variations[index] || "",
           framework: isCustomStyle ? "custom" : style,
           customStyle: isCustomStyle ? style : undefined,
-          model: modelType, // Use the specific model for this generation
+          model: modelType,
+          requestId
         }),
       });
-
-      const data = await response.json();
-
-      if (response.status === 401) {
-        // Authentication required error
-        setAlertInfo({
-          title: "Authentication Required",
-          message: "You need to sign in to generate web apps. Sign in to continue.",
-          type: 'auth'
-        });
-        setShowAlertModal(true);
-        return;
-      }
       
-      if (response.status === 402) {
-        // Insufficient credits error
-        setAlertInfo({
-          title: "No Credits Remaining",
-          message: "You have used all your available credits. Please check your dashboard to manage your credits.",
-          type: 'credits'
-        });
-        setShowAlertModal(true);
+      // Remove from pending requests when done
+      pendingRequests.current.delete(requestSignature);
+
+      if (response.status === 409) {
+        console.log('Duplicate request detected, skipping...');
         return;
       }
 
-      if (response.status === 429) {
-        // Show signup modal for rate limit
-        setShowSignupModal(true);
-        throw new Error("Rate limit exceeded. Please create an account to continue.");
+      let data;
+      try {
+        data = await response.json();
+      } catch (err) {
+        console.error('Failed to parse JSON response:', err);
+        throw new Error('Failed to parse server response');
       }
 
-      if (data.error === "rate_limit_exceeded") {
-        setShowSignupModal(true);
-        throw new Error("Rate limit exceeded. Please create an account to continue.");
-      } else if (data.error === "insufficient_credits") {
-        throw new Error("You have no credits remaining. Please purchase more credits to continue.");
-      } else if (data.error) {
-        throw new Error(data.error);
+      if (!response.ok) {
+        const errorMessage = data?.error || 'An unknown error occurred';
+        const errorDetails = data?.details ? `: ${data.details}` : '';
+        
+        if (response.status === 401) {
+          // Authentication required error
+          setAlertInfo({
+            title: "Authentication Required",
+            message: "You need to sign in to generate web apps. Sign in to continue.",
+            type: 'auth'
+          });
+          setShowAlertModal(true);
+          return;
+        }
+        
+        if (response.status === 402) {
+          // Insufficient credits error
+          setAlertInfo({
+            title: "No Credits Remaining",
+            message: "You have used all your available credits. Please check your dashboard to manage your credits.",
+            type: 'credits'
+          });
+          setShowAlertModal(true);
+          return;
+        }
+
+        if (response.status === 429) {
+          // Show signup modal for rate limit
+          setShowSignupModal(true);
+          throw new Error("Rate limit exceeded. Please create an account to continue.");
+        }
+        
+        if (response.status === 500 && errorMessage.includes('deduct credits')) {
+          console.error(`Credit deduction failed: ${errorMessage}${errorDetails}`);
+          setError(`Credit deduction failed: ${errorMessage}${errorDetails}. Please try again or contact support.`);
+          return;
+        }
+        
+        throw new Error(`${errorMessage}${errorDetails}`);
       }
 
       // Check if credits were returned (user is authenticated)
@@ -277,6 +314,12 @@ function ResultsContent() {
               newResults[index] = data.code;
               return newResults;
             });
+
+            // Update credits from the last response
+            if (data.credits !== undefined) {
+              setRemainingCredits(data.credits);
+              setTokens(data.credits);
+            }
           });
         } catch (error: unknown) {
           console.error("Error updating apps:", error);
@@ -381,6 +424,12 @@ function ResultsContent() {
             newResults[selectedAppIndex] = data.code;
             return newResults;
           });
+
+          // Update credits
+          if (data.credits !== undefined) {
+            setRemainingCredits(data.credits);
+            setTokens(data.credits);
+          }
         } catch (error) {
           console.error("Error updating app:", error);
           setError("Failed to update app. Please try again.");
@@ -468,6 +517,12 @@ function ResultsContent() {
         
         // Reset selected style after generation
         setSelectedStyle(null);
+
+        // Update credits
+        if (data.credits !== undefined) {
+          setRemainingCredits(data.credits);
+          setTokens(data.credits);
+        }
         
       } catch (error) {
         console.error("Error generating new app:", error);
@@ -503,6 +558,9 @@ function ResultsContent() {
     // Set the last tile to be expanded initially
     setExpandedAppIndex(numGenerations - 1);
     setSelectedAppIndex(numGenerations - 1);
+
+    // Clear any pending requests
+    pendingRequests.current.clear();
 
     // Generate apps in parallel with a small delay between each to avoid overwhelming the server
     // This creates a staggered loading effect that feels more responsive

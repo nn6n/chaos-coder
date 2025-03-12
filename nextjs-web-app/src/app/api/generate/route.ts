@@ -6,10 +6,13 @@ import { AuthService } from "@/lib/auth";
 
 export const runtime = "edge";
 
+interface DeductionResult {
+  new_credits: number;
+}
+
 export async function POST(req: NextRequest) {
   try {
     // Use the AuthService to create a server client
-    // We need to await cookies() first to get the cookie store
     const cookieStore = await cookies();
     const supabase = await AuthService.createServerClient({
       getAll: () => cookieStore.getAll()
@@ -17,13 +20,13 @@ export async function POST(req: NextRequest) {
     
     // Parse the request body
     const body = await req.json();
-    console.log(JSON.stringify(body));
-    const { prompt, variation = '', framework, customStyle } = body;
+    // Log only the core request details without full body
+    
+    const { prompt, variation = '', framework, customStyle, requestId } = body;
     
     // Check if user is authenticated
     const { data: { user } } = await supabase.auth.getUser();
     
-    // Rate limiting for unauthenticated users (only check, don't block yet)
     if (!user) {
       return NextResponse.json(
         { error: "Authentication required" },
@@ -31,6 +34,31 @@ export async function POST(req: NextRequest) {
       );
     }
     
+    // Check for duplicate request
+    if (requestId) {
+      try {
+        // Use `any` type here to bypass type checking for now
+        const { data: existingRequest, error } = await (supabase as any)
+          .from('credit_history')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('request_id', requestId)
+          .maybeSingle();
+        
+        if (error) {
+          console.error('[Generate] Error checking for duplicate request:', error);
+        } else if (existingRequest) {
+          console.log('[Generate] Duplicate request detected:', requestId);
+          return NextResponse.json(
+            { error: "Duplicate request" },
+            { status: 409 }
+          );
+        }
+      } catch (error) {
+        console.error('[Generate] Error checking for duplicate request:', error);
+      }
+    }
+
     // User is authenticated, check their credits
     const { data: userProfile } = await supabase
       .from('profiles')
@@ -45,21 +73,10 @@ export async function POST(req: NextRequest) {
       );
     }
     
-    // Check if user has enough credits
-    const userCredits = userProfile?.credits ?? 0;
-    
     // All models now cost exactly 1 credit
     const modelCost = 1;
-    
-    if (userCredits < modelCost && body.variation !== "rate-limit-check") {
-      return NextResponse.json(
-        { error: "insufficient_credits", message: "You don't have enough credits for this generation. Please purchase more credits to continue." },
-        { status: 402 }
-      );
-    }
-    
-    // Get the style instructions from our central config based on framework
-    // or use the custom style if provided
+
+    // Get the style instructions from our central config
     const styleInstructions = customStyle || (framework && framework !== 'custom' 
       ? getStylePrompt(framework) 
       : '');
@@ -83,7 +100,13 @@ export async function POST(req: NextRequest) {
           {
             virtual_key: "groq-virtual-ke-9479cd",
             override_params: {
-              model: "deepseek-r1-distill-qwen-32b",
+              model: "qwen-2.5-coder-32b",
+            },
+          },
+          {
+            virtual_key: "sambanova-6bc4d0",
+            override_params: {
+              model: "Qwen2.5-Coder-32B-Instruct",
             },
           },
           {
@@ -95,13 +118,7 @@ export async function POST(req: NextRequest) {
           {
             virtual_key: "openrouter-07e727",
             override_params: {
-              model: "deepseek/deepseek-r1-distill-qwen-32b",
-            },
-          },
-          {
-            virtual_key: "sambanova-6bc4d0",
-            override_params: {
-              model: "Meta-Llama-3.2-1B-Instruct",
+              model: "qwen/qwen-2.5-coder-32b-instruct",
             },
           },
         ],
@@ -192,6 +209,14 @@ Format the code with proper indentation and spacing for readability.`;
       // Get the response content
       let code = response.choices[0]?.message?.content || "";
 
+      if (!code) {
+        console.error('[Generate] Empty code response from API');
+        return NextResponse.json(
+          { error: "Empty response from API" },
+          { status: 500 }
+        );
+      }
+
       // Trim out any markdown code blocks (```html, ```, etc.)
       if (typeof code === 'string') {
         code = code
@@ -204,49 +229,56 @@ Format the code with proper indentation and spacing for readability.`;
         code = code.replace(/<think>([\s\S]*?)<\/think>/g, "");
       }
 
-      // Only deduct credits after successful generation and only for real generations
-      if (user && body.variation !== "rate-limit-check") {
-        // Deduct 1 credit (all models now cost 1 credit)
-        const { error: updateError } = await supabase
-          .from('profiles')
-          .update({ credits: userCredits - modelCost })
-          .eq('id', user.id);
+      try {
+        // Use a transaction to ensure atomic credit deduction
+        // Use `any` type here to bypass type checking for now
+        const { data, error: deductionError } = await (supabase as any).rpc(
+          'deduct_generation_credit',
+          { 
+            user_id: user.id,
+            request_id: requestId || null
+          }
+        );
         
-        if (updateError) {
-          console.error("Error updating user credits:", updateError);
+        if (deductionError) {
+          console.error('[Generate] Credit deduction failed:', deductionError);
           return NextResponse.json(
-            { error: "Failed to update credits" },
+            { error: "Failed to deduct credits", details: deductionError.message },
             { status: 500 }
           );
         }
-      }
 
-      // If user is authenticated, return remaining credits after successful deduction
-      if (user) {
-        const { data: updatedProfile } = await supabase
-          .from('profiles')
-          .select('credits')
-          .eq('id', user.id)
-          .single();
-        
+        if (!data || !Array.isArray(data) || !data[0]) {
+          console.error('[Generate] Credit deduction returned no result');
+          return NextResponse.json(
+            { error: "Failed to deduct credits", details: "No result returned" },
+            { status: 500 }
+          );
+        }
+
+        const newCredits = data[0].new_credits;
+
         return NextResponse.json({ 
           code,
-          credits: updatedProfile?.credits ?? 0,
-          cost: modelCost // Return the cost of the generation
+          credits: newCredits,
+          cost: modelCost
         });
+      } catch (error) {
+        console.error('[Generate] Error during credit deduction:', error);
+        return NextResponse.json(
+          { error: "Failed to deduct credits", details: String(error) },
+          { status: 500 }
+        );
       }
-
-      return NextResponse.json({ code });
-      
     } catch (error) {
-      console.error("Error generating code:", error);
+      console.error('[Generate] Error during generation:', error);
       return NextResponse.json(
         { error: "Failed to generate code" },
         { status: 500 }
       );
     }
   } catch (error) {
-    console.error("Error:", error);
+    console.error('[Generate] Unexpected error:', error);
     return NextResponse.json(
       { error: "Failed to generate code" },
       { status: 500 }

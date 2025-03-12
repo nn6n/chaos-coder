@@ -36,7 +36,9 @@ export default function PromptInput({
 
   // Calculate cost based on model and number of generations
   const calculateCost = () => {
-    return numGenerations * 1; // All models now cost exactly 1 credit
+    // If in chaos mode, we're updating all generations
+    // If in single mode, we're only updating one generation
+    return chaosMode ? numGenerations : 1;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
