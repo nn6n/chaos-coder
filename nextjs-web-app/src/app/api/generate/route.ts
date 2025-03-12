@@ -87,6 +87,12 @@ export async function POST(req: NextRequest) {
             },
           },
           {
+            virtual_key: "sambanova-6bc4d0",
+            override_params: {
+              model: "Qwen2.5-Coder-32B-Instruct",
+            },
+          },
+          {
             virtual_key: "cerebras-b79172",
             override_params: {
               model: "deepseek-r1-distill-llama-70b",
@@ -96,12 +102,6 @@ export async function POST(req: NextRequest) {
             virtual_key: "openrouter-07e727",
             override_params: {
               model: "qwen/qwen-2.5-coder-32b-instruct",
-            },
-          },
-          {
-            virtual_key: "sambanova-6bc4d0",
-            override_params: {
-              model: "Meta-Llama-3.2-1B-Instruct",
             },
           },
         ],
