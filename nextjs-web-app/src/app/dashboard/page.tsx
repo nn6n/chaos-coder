@@ -6,7 +6,6 @@ import { motion } from "framer-motion";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { AuthService } from "@/lib/auth";
-import { checkAndRefreshCredits } from "@/lib/credits";
 import SubscriptionPlans from "@/components/SubscriptionPlans";
 import CreditPurchase from "@/components/CreditPurchase";
 
@@ -25,7 +24,6 @@ export default function DashboardPage() {
   const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(null);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const [isProcessingCredits, setIsProcessingCredits] = useState(false);
-  const [creditsRefreshed, setCreditsRefreshed] = useState(false);
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
@@ -81,39 +79,27 @@ export default function DashboardPage() {
         
         const supabase = AuthService.createClient();
         
-        // Check if credits need refresh
-        const { credits: refreshedCredits, refreshed } = await checkAndRefreshCredits(
-          supabase,
-          user.id
-        );
+        // Get full profile
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
         
-        if (refreshed) {
-          setCredits(refreshedCredits);
-          setTokens(refreshedCredits);
-          setCreditsRefreshed(true);
-          setTimeout(() => setCreditsRefreshed(false), 5000);
-        } else {
-          // Get full profile
-          const { data: profileData, error: profileError } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', user.id)
-            .single();
+        if (profileError) {
+          console.error("Error fetching profile:", profileError);
+          setError("Could not load profile data");
+        } else if (profileData) {
+          const profile = profileData as unknown as {
+            credits: number;
+            subscription_tier?: string;
+            subscription_status?: string;
+          };
           
-          if (profileError) {
-            console.error("Error fetching profile:", profileError);
-            setError("Could not load profile data");
-          } else if (profileData) {
-            const profile = profileData as unknown as {
-              credits: number;
-              subscription_tier?: string;
-              subscription_status?: string;
-            };
-            
-            setCredits(profile.credits);
-            setSubscriptionTier(profile.subscription_tier || "free");
-            setSubscriptionStatus(profile.subscription_status || null);
-          }
+          setCredits(profile.credits);
+          setTokens(profile.credits);
+          setSubscriptionTier(profile.subscription_tier || "free");
+          setSubscriptionStatus(profile.subscription_status || null);
         }
       } catch (err) {
         console.error("Error loading profile:", err);
@@ -597,7 +583,6 @@ export default function DashboardPage() {
       }
       
       setLoading(false);
-      setCreditsRefreshed(true);
     } catch (err) {
       console.error('❌ Exception in refreshUserProfile:', err);
       setError('An error occurred while refreshing your profile');
@@ -675,12 +660,6 @@ export default function DashboardPage() {
           {successMessage && (
             <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-green-900 text-green-100' : 'bg-green-100 text-green-800'}`}>
               {successMessage}
-            </div>
-          )}
-          
-          {creditsRefreshed && (
-            <div className={`p-4 rounded-lg ${theme === 'dark' ? 'bg-blue-900 text-blue-100' : 'bg-blue-100 text-blue-800'}`}>
-              Your daily credits have been refreshed!
             </div>
           )}
           
