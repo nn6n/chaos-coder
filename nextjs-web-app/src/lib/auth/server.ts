@@ -1,12 +1,9 @@
 import { createServerClient } from '@supabase/ssr'
 import type { Database } from '@/types/supabase'
-import type { CookieOptions } from '@supabase/ssr'
-import { ReadonlyRequestCookies } from 'next/dist/server/web/spec-extension/adapters/request-cookies'
 
 // Define cookie store interface for compatibility
 interface CookieStore {
   getAll: () => Array<{ name: string; value: string }>;
-  set?: (name: string, value: string, options?: CookieOptions) => void;
 }
 
 /**
@@ -28,13 +25,11 @@ export async function createClient(cookieStore?: CookieStore) {
         getAll() {
           return cookies.getAll();
         },
-        setAll(cookiesToSet) {
+        setAll() {
           try {
-            if (cookies.set) {
-              cookiesToSet.forEach(({ name, value, options }) => {
-                cookies.set!(name, value, options);
-              });
-            }
+            // The `setAll` method was called from a Server Component.
+            // This can be ignored if you have middleware refreshing
+            // user sessions.
           } catch (e) {
             // Can be safely ignored if using middleware to refresh sessions
             console.warn('Error setting cookies in server client:', e);
@@ -52,27 +47,10 @@ export async function createClient(cookieStore?: CookieStore) {
 export async function createServerComponentClient() {
   try {
     // Use dynamic import to avoid breaking in non-Server Component contexts
-    const nextHeaders = await import('next/headers');
+    const { cookies } = await import('next/headers');
     
-    // Create a wrapper for the cookies
-    const cookieWrapper = {
-      getAll: () => {
-        try {
-          // Only call cookies() when this code actually executes
-          return nextHeaders.cookies().getAll();
-        } catch {
-          return [];
-        }
-      },
-      set: (name: string, value: string, options?: CookieOptions) => {
-        try {
-          // Only call cookies() when this code actually executes
-          nextHeaders.cookies().set(name, value, options);
-        } catch {
-          // This is expected in Server Components and can be ignored
-        }
-      }
-    };
+    // Get cookie store
+    const cookieStore = cookies();
 
     return createServerClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -80,22 +58,23 @@ export async function createServerComponentClient() {
       {
         cookies: {
           getAll() {
-            return cookieWrapper.getAll();
+            return cookieStore.getAll();
           },
           setAll(cookiesToSet) {
             try {
-              cookiesToSet.forEach(({ name, value, options }) => {
-                cookieWrapper.set(name, value, options);
-              });
+              cookiesToSet.forEach(({ name, value, options }) =>
+                cookieStore.set(name, value, options)
+              )
             } catch {
-              // This is expected in Server Components and can be ignored
-              // when middleware is handling session refresh
+              // The `setAll` method was called from a Server Component.
+              // This can be ignored if you have middleware refreshing
+              // user sessions.
             }
           },
         },
       }
     );
-  } catch (error) {
+  } catch {
     // Using fallback error handler
     throw new Error('This method should only be used in Server Components');
   }
