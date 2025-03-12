@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { PaymentService } from '@/lib/payment';
 import { AuthService } from '@/lib/auth';
-import { CookieOptions } from '@supabase/ssr';
 
 // Simplified request type
 interface CheckoutRequestBody {
@@ -89,7 +88,7 @@ export async function POST(req: NextRequest) {
     if (!stripeCustomerId) {
       console.log(`🔄 [${requestId}] No Stripe customer ID found, creating new customer`);
       
-      stripeCustomerId = await PaymentService.createOrRetrieveCustomer(userEmail, userId);
+      stripeCustomerId = await PaymentService.getOrCreateCustomer(userId, userEmail);
       
       // Update profile with new customer ID
       const { error: updateError } = await supabase
@@ -138,4 +137,4 @@ export async function POST(req: NextRequest) {
       { status: 500 }
     );
   }
-} 
+}
