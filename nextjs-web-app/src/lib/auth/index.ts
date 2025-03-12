@@ -2,7 +2,8 @@
 export { createClient as createBrowserClient } from './client';
 export { 
   createClient as createServerClient,
-  createServerComponentClient
+  createServerComponentClient,
+  createAdminClient
 } from './server';
 
 // Export type definitions

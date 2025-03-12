@@ -376,7 +376,7 @@ export class PaymentService {
     if (session.metadata?.credits && session.metadata?.userId) {
       // Get the user's current tier to determine credit multiplier
       const userId = session.metadata.userId;
-      const supabase = await AuthService.createServerClient();
+      const supabase = await AuthService.createAdminClient();
 
       // Get the user's tier
       const { data: profile, error: profileError } = await supabase
@@ -513,8 +513,8 @@ export class PaymentService {
     console.log(`📊 Subscription status: ${subscription.status}`);
     console.log(`📊 Full subscription data:`, subscription);
 
-    const supabase =
-      (await AuthService.createServerClient()) as SupabaseClient<Database>;
+    // Use admin client to bypass RLS policies
+    const supabase = await AuthService.createAdminClient() as SupabaseClient<Database>;
 
     try {
       // Get the user ID from the subscription metadata
@@ -706,57 +706,51 @@ export class PaymentService {
    * Handle invoice payment succeeded event
    */
   private static async handleInvoicePaymentSucceeded(invoice: StripeInvoice) {
-    // This could be used for tracking successful payments or adding credits for renewals
     console.log(`Invoice payment succeeded: ${invoice.id}`);
+    // Use admin client for any database operations if implemented in the future
   }
 
   /**
    * Handle invoice payment failed event
    */
   private static async handleInvoicePaymentFailed(invoice: StripeInvoice) {
-    const supabase = await AuthService.createServerClient();
-
-    // Find the user ID from the customer metadata
-    const customerId = invoice.customer;
-    const stripe = this.getStripe();
-
+    console.log(`Invoice payment failed: ${invoice.id}`);
+    
+    if (!invoice.customer || !invoice.subscription) {
+      console.error(`❌ Missing customer or subscription ID in invoice`);
+      return;
+    }
+    
+    // Get the customer and change their subscription status
+    const customerId = typeof invoice.customer === 'string' 
+      ? invoice.customer 
+      : invoice.customer.id;
+      
+    const subscriptionId = typeof invoice.subscription === 'string'
+      ? invoice.subscription
+      : invoice.subscription.id;
+    
     try {
-      const customer = (await stripe.customers.retrieve(
-        customerId
-      )) as StripeCustomer;
-
-      if (!customer || customer.deleted) {
-        console.error("Customer not found or deleted");
-        return;
+      // Use admin client for database operations
+      const supabase = await AuthService.createAdminClient();
+      
+      // Update the profile with past_due status
+      const { error } = await supabase
+        .from('profiles')
+        .update({ 
+          subscription_status: 'past_due',
+          updated_at: new Date().toISOString()
+        })
+        .eq('stripe_customer_id', customerId)
+        .eq('stripe_subscription_id', subscriptionId);
+        
+      if (error) {
+        console.error(`❌ Failed to update subscription status: ${error.message}`);
+      } else {
+        console.log(`✅ Updated subscription status to past_due for customer ${customerId}`);
       }
-
-      const userId = customer.metadata?.userId;
-
-      if (!userId) {
-        console.error("No user ID in customer metadata");
-        return;
-      }
-
-      // Update the user's subscription information to reflect the failed payment
-      try {
-        const { error } = await (supabase as any)
-          .from("profiles")
-          .update({
-            subscription_status: "past_due",
-          })
-          .eq("id", userId);
-
-        if (error) {
-          console.error("Error updating profile:", error);
-          return;
-        }
-      } catch (error) {
-        console.error("Error updating profile:", error);
-      }
-
-      console.log(`Invoice payment failed for user ${userId}`);
-    } catch (error) {
-      console.error("Error processing invoice payment failure:", error);
+    } catch (err) {
+      console.error(`❌ Error handling invoice payment failure:`, err);
     }
   }
 

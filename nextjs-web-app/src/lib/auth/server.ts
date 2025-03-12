@@ -84,4 +84,35 @@ export async function createServerComponentClient() {
     // Using fallback error handler
     throw new Error('This method should only be used in Server Components');
   }
+}
+
+/**
+ * Creates a Supabase client with admin privileges using the service role key
+ * This should ONLY be used for server-side admin operations (like webhooks)
+ * that need to bypass RLS policies
+ */
+export async function createAdminClient() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  
+  if (!serviceRoleKey) {
+    console.error('SUPABASE_SERVICE_ROLE_KEY is not configured');
+    throw new Error('Admin client configuration error: Missing service role key');
+  }
+  
+  return createServerClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceRoleKey,
+    {
+      // No cookies needed for admin operations
+      cookies: {
+        getAll() {
+          return [];
+        },
+        setAll() {
+          // Admin client doesn't need to set cookies
+          return;
+        },
+      },
+    }
+  );
 } 

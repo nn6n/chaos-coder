@@ -1,5 +1,5 @@
 import { createClient as createBrowserClient } from './client';
-import { createClient as createServerClient, createServerComponentClient as createServerComponentClientFn } from './server';
+import { createClient as createServerClient, createServerComponentClient as createServerComponentClientFn, createAdminClient as createAdminClientFn } from './server';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from '@/types/supabase';
 import type { CookieOptions } from '@supabase/ssr';
@@ -35,6 +35,15 @@ export class AuthService {
    */
   static async createServerComponentClient() {
     return await createServerComponentClientFn();
+  }
+
+  /**
+   * Creates a Supabase client with admin privileges using the service role key
+   * This should ONLY be used for server-side admin operations (like webhooks)
+   * that need to bypass RLS policies
+   */
+  static async createAdminClient() {
+    return await createAdminClientFn();
   }
 
   /**
