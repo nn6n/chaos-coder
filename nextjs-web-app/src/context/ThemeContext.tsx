@@ -1,8 +1,8 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect } from "react";
 
-type Theme = "light" | "dark";
+type Theme = "dark";
 
 interface ThemeContextType {
   theme: Theme;
@@ -12,31 +12,18 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>("dark");
+  const theme: Theme = "dark";
 
   useEffect(() => {
-    // Check if user has a theme preference in localStorage
-    const savedTheme = localStorage.getItem("theme") as Theme;
-    if (savedTheme) {
-      setTheme(savedTheme);
-    } else {
-      // Check system preference
-      const prefersDark = window.matchMedia(
-        "(prefers-color-scheme: dark)"
-      ).matches;
-      setTheme(prefersDark ? "dark" : "light");
-    }
+    // Always set dark theme
+    document.documentElement.classList.remove("light");
+    document.documentElement.classList.add("dark");
   }, []);
 
-  useEffect(() => {
-    // Update document class when theme changes
-    document.documentElement.classList.remove("light", "dark");
-    document.documentElement.classList.add(theme);
-    localStorage.setItem("theme", theme);
-  }, [theme]);
-
+  // Keep toggleTheme function but make it do nothing since we're enforcing dark mode
   const toggleTheme = () => {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
+    // Do nothing - we're enforcing dark mode
+    return;
   };
 
   return (
