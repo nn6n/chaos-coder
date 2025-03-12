@@ -18,9 +18,12 @@ export const metadata: Metadata = {
   description:
     "Generate six different web applications from a single prompt using Groq's LLama3-70B model",
   icons: {
-    icon: "/coin.png",
+    icon: [
+      { url: '/favicon.ico', sizes: 'any' },
+      { url: '/coin.png', type: 'image/png' }
+    ],
     apple: "/coin.png",
-    shortcut: "/coin.png",
+    shortcut: "/favicon.ico",
   },
 };
 
