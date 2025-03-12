@@ -11,7 +11,6 @@ interface PromptInputProps {
   isOpen: boolean;
   onSubmit: (prompt: string, isUpdate?: boolean, chaosMode?: boolean) => Promise<Record<string, unknown> | void> | void;
   isUpdateMode?: boolean;
-  model?: string;
   numGenerations?: number;
   initialStyle?: string | null;
 }
@@ -19,7 +18,6 @@ interface PromptInputProps {
 export default function PromptInput({
   onSubmit,
   isUpdateMode = false,
-  model = "fast",
   numGenerations = 1,
   initialStyle = null,
 }: PromptInputProps) {
@@ -38,7 +36,7 @@ export default function PromptInput({
 
   // Calculate cost based on model and number of generations
   const calculateCost = () => {
-    return numGenerations * (model === "pro" ? 5 : 1);
+    return numGenerations * 1; // All models now cost exactly 1 credit
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
