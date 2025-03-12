@@ -142,7 +142,8 @@ export default function DashboardPage() {
     credits?: number;
     subscription_tier?: string;
     subscription_status?: string;
-    email?: string;
+    // Add additional properties that might be accessed
+    [key: string]: any;
   }) => {
     if (profile) {
       // Only update if the values are different
@@ -160,6 +161,7 @@ export default function DashboardPage() {
         setSubscriptionStatus(profile.subscription_status || null);
       }
       
+      // Use indexer to avoid type error
       if (userEmail !== profile.email) {
         setUserEmail(profile.email || null);
       }
@@ -270,18 +272,7 @@ export default function DashboardPage() {
         setIsUpgrading(false);
         return;
       }
-      
-      // Log the access token details for debugging
-      const tokenFirstPart = sessionData.session.access_token.split('.')[0];
-      const tokenSecondPart = sessionData.session.access_token.split('.')[1];
-      console.log(`🔑 Access token analysis:`, {
-        available: !!sessionData.session.access_token,
-        length: sessionData.session.access_token.length,
-        firstPart: tokenFirstPart,
-        decodedHeader: tokenFirstPart ? JSON.parse(atob(tokenFirstPart)) : null,
-        decodedPayload: tokenSecondPart ? JSON.parse(atob(tokenSecondPart)) : null
-      });
-      
+
       // Get the current user to verify authentication
       const { data: userData, error: userError } = await supabase.auth.getUser();
       if (userError || !userData.user) {
@@ -303,31 +294,36 @@ export default function DashboardPage() {
       
       console.log(`🔄 Starting Stripe checkout process for tier: ${plan}`);
       
+      // Authentication token
+      const accessToken = sessionData.session.access_token;
+      
+      // Request body
+      const requestBody = { 
+        tier: plan,
+        userId: userData.user.id,
+        userEmail: userData.user.email || '',
+      };
+      
       // Log the request details before making the call
-      const requestDetails = {
+      console.log(`📤 Outgoing request details:`, {
         url: '/api/stripe/checkout',
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${sessionData.session.access_token}`,
-          'Origin': window.location.origin
+          'Authorization': `Bearer ${accessToken}`,
         },
-        body: { 
-          tier: plan,
-          accessToken: sessionData.session.access_token,
-          userId: userData.user.id,
-          userEmail: userData.user.email,
-          userAuthTime: userData.user.last_sign_in_at || new Date().toISOString()
-        }
-      };
-      console.log(`📤 Outgoing request details:`, requestDetails);
+        body: requestBody
+      });
       
-      // Make the API call with credentials included to pass cookies
+      // Make the API call with credentials and proper auth header
       const response = await fetch('/api/stripe/checkout', {
-        method: requestDetails.method,
-        headers: requestDetails.headers,
-        credentials: 'include', // This is crucial for passing cookies
-        body: JSON.stringify(requestDetails.body),
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${accessToken}`
+        },
+        credentials: 'include', // Include cookies
+        body: JSON.stringify(requestBody),
       });
       
       console.log(`📥 API response details:`, {
@@ -377,20 +373,37 @@ export default function DashboardPage() {
       
       // Get access token from current session
       const supabase = AuthService.createClient();
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData?.session?.access_token;
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
       
-      if (!accessToken) {
-        console.error('No valid session found for credit purchase');
-        throw new Error('No valid session found. Please log in again.');
+      if (sessionError || !sessionData?.session?.access_token) {
+        console.error('No valid session found for credit purchase:', sessionError);
+        setError('No valid session found. Please log in again.');
+        setIsProcessingCredits(false);
+        return;
+      }
+      
+      const accessToken = sessionData.session.access_token;
+      
+      // Get the user data for verification
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) {
+        console.error('User verification failed for credit purchase:', userError);
+        setError('Could not verify your user account');
+        setIsProcessingCredits(false);
+        return;
       }
       
       // Log request details for debugging
       console.log(`🔄 Sending credit purchase request:`, {
         creditAmount,
-        hasAccessToken: !!accessToken,
-        timestamp: new Date().toISOString()
+        userId: userData.user.id,
+        userEmail: userData.user.email
       });
+      
+      // Request body
+      const requestBody = {
+        amount: creditAmount // This is CREDITS, not dollars
+      };
       
       // Create Stripe checkout session for credit purchase
       const response = await fetch('/api/stripe/credits', {
@@ -400,10 +413,7 @@ export default function DashboardPage() {
           'Authorization': `Bearer ${accessToken}`
         },
         credentials: 'include', // Include cookies for additional auth context
-        body: JSON.stringify({ 
-          amount: creditAmount, // This is CREDITS, not dollars
-          accessToken
-        }),
+        body: JSON.stringify(requestBody),
       });
       
       // Log response details
@@ -461,7 +471,7 @@ export default function DashboardPage() {
       
       if (error) {
         console.error("User error:", error);
-        setError(error.message);
+        setError(error instanceof Error ? error.message : "Authentication error");
         setLoading(false);
         return null;
       }
@@ -721,8 +731,7 @@ export default function DashboardPage() {
             )}
           </div>
           
-          {/* Subscription Plans 
-UNDER DEV
+          {/* Subscription Plans UNDER DEV */}
           <SubscriptionPlans 
             currentPlan={subscriptionTier}
             credits={credits}
@@ -730,7 +739,6 @@ UNDER DEV
             isLoading={isUpgrading}
             subscriptionStatus={subscriptionStatus}
           />
-*/}
         </motion.div>
       </div>
     </div>

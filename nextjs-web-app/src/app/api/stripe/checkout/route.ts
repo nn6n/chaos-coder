@@ -5,7 +5,7 @@ import { AuthService } from '@/lib/auth';
 // Simplified request type
 interface CheckoutRequestBody {
   tier: 'pro' | 'ultra';
-  accessToken: string;
+  accessToken?: string;
   userId: string;
   userEmail: string;
 }
@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   try {
     // 1. Basic request validation
     const body = await req.json() as CheckoutRequestBody;
-    const { tier, accessToken, userId, userEmail } = body;
+    const { tier, userId, userEmail } = body;
     
     if (!tier || !['pro', 'ultra'].includes(tier)) {
       return new NextResponse(
@@ -26,29 +26,74 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (!accessToken || !userId || !userEmail) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Missing authentication data' }), 
-        { status: 400 }
-      );
-    }
+    // 2. Get authentication token from Authorization header or request body
+    const authHeader = req.headers.get('Authorization');
+    const accessToken = authHeader ? authHeader.replace('Bearer ', '') : body.accessToken;
 
-    // 2. Create Supabase client with auth token
-    const supabase = await AuthService.createServerClientWithToken(accessToken);
-    console.log(`🔄 [${requestId}] Created Supabase client`);
-    
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    console.log(`👤 [${requestId}] Auth check result - User:`, user?.id, 'Error:', userError?.message);
-    
-    if (userError || !user?.id || user.id !== userId) {
-      console.error(`❌ [${requestId}] Auth error:`, userError);
+    if (!accessToken) {
+      console.error(`❌ [${requestId}] Missing authentication token`);
       return new NextResponse(
-        JSON.stringify({ error: 'Not authenticated' }), 
+        JSON.stringify({ error: 'Missing authentication token' }), 
         { status: 401 }
       );
     }
 
-    // 3. Get or create profile
+    // 3. Create Supabase client using cookie store from request
+    let supabase;
+    try {
+      // Get the cookie store from the request
+      const cookieStore = {
+        getAll() {
+          return req.cookies.getAll();
+        }
+      };
+
+      // Create a server client with cookies AND token
+      supabase = await AuthService.createServerClient(cookieStore);
+      
+      // Set the session with the token
+      await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: ''
+      });
+      
+      console.log(`✅ [${requestId}] Created Supabase client with auth token successfully`);
+    } catch (authError) {
+      console.error(`❌ [${requestId}] Auth error when creating client:`, authError);
+      return new NextResponse(
+        JSON.stringify({ 
+          error: 'Authentication failed',
+          details: authError instanceof Error ? authError.message : 'Invalid session'
+        }), 
+        { status: 401 }
+      );
+    }
+    
+    // 4. Verify user identity
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    console.log(`👤 [${requestId}] Auth check result - User ID:`, user?.id, 'Error:', userError?.message);
+    
+    if (userError || !user?.id) {
+      console.error(`❌ [${requestId}] Auth validation error:`, userError || 'User not found');
+      return new NextResponse(
+        JSON.stringify({ 
+          error: 'User authentication failed',
+          details: userError?.message || 'User not found'
+        }), 
+        { status: 401 }
+      );
+    }
+
+    // Verify user ID matches the requested user ID
+    if (user.id !== userId) {
+      console.error(`❌ [${requestId}] User ID mismatch - Token user: ${user.id}, Request user: ${userId}`);
+      return new NextResponse(
+        JSON.stringify({ error: 'User ID mismatch' }), 
+        { status: 403 }
+      );
+    }
+
+    // 5. Get or create profile
     const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('stripe_customer_id')
@@ -82,7 +127,7 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // 4. Get or create Stripe customer
+    // 6. Get or create Stripe customer
     let stripeCustomerId = profile?.stripe_customer_id;
     
     if (!stripeCustomerId) {
@@ -105,7 +150,7 @@ export async function POST(req: NextRequest) {
       console.log(`✅ [${requestId}] Using existing Stripe customer ID: ${stripeCustomerId}`);
     }
 
-    // 5. Create checkout session
+    // 7. Create checkout session
     console.log(`🔄 Creating subscription checkout for customer ${stripeCustomerId}, tier: ${tier}`);
     
     const { url } = await PaymentService.createSubscriptionCheckout(

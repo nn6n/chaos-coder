@@ -1,0 +1,1 @@
+-- Fix RLS policies for profiles to allow service role to manage all profiles
