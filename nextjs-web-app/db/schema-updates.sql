@@ -580,4 +580,65 @@ BEGIN
     subscription_tier = 'ultra' 
     AND (credits < 1000 OR last_credit_refresh < now() - INTERVAL '24 hours');
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER; 
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Add request_id column to credit_history if it doesn't exist
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'credit_history' 
+    AND column_name = 'request_id'
+  ) THEN
+    ALTER TABLE public.credit_history ADD COLUMN request_id TEXT;
+    CREATE INDEX credit_history_request_id_idx ON public.credit_history(request_id);
+  END IF;
+END
+$$;
+
+-- Function to deduct a generation credit atomically
+CREATE OR REPLACE FUNCTION deduct_generation_credit(
+  user_id UUID,
+  request_id TEXT DEFAULT NULL
+)
+RETURNS TABLE (new_credits INTEGER) 
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Check for duplicate request if request_id is provided
+  IF request_id IS NOT NULL THEN
+    IF EXISTS (
+      SELECT 1 FROM credit_history 
+      WHERE credit_history.user_id = deduct_generation_credit.user_id 
+      AND credit_history.request_id = deduct_generation_credit.request_id
+    ) THEN
+      RAISE EXCEPTION 'Duplicate request';
+    END IF;
+  END IF;
+
+  -- Use FOR UPDATE to lock the row
+  UPDATE profiles 
+  SET credits = credits - 1
+  WHERE profiles.id = user_id 
+  AND credits >= 1
+  RETURNING credits as new_credits INTO STRICT new_credits;
+  
+  -- Log the credit deduction
+  INSERT INTO credit_history (
+    user_id,
+    amount,
+    type,
+    description,
+    request_id
+  ) VALUES (
+    user_id,
+    -1,
+    'generation',
+    'Credit deducted for code generation',
+    request_id
+  );
+  
+  RETURN NEXT;
+END;
+$$; 
