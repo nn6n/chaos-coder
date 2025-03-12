@@ -721,7 +721,8 @@ export default function DashboardPage() {
             )}
           </div>
           
-          {/* Subscription Plans */}
+          {/* Subscription Plans 
+UNDER DEV
           <SubscriptionPlans 
             currentPlan={subscriptionTier}
             credits={credits}
@@ -729,6 +730,7 @@ export default function DashboardPage() {
             isLoading={isUpgrading}
             subscriptionStatus={subscriptionStatus}
           />
+*/}
         </motion.div>
       </div>
     </div>
