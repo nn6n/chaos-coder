@@ -143,8 +143,32 @@ export class AuthService {
    * Create a server client with a token (for API routes)
    */
   static async createServerClientWithToken(accessToken: string) {
-    const supabase = await createServerClient();
-    supabase.auth.setSession({ access_token: accessToken, refresh_token: '' });
-    return supabase;
+    try {
+      const supabase = await createServerClient();
+      
+      // Set the session with both access token and refresh token (even if refresh token is empty)
+      await supabase.auth.setSession({ 
+        access_token: accessToken, 
+        refresh_token: '' 
+      });
+      
+      // Immediately verify the session worked by getting the user
+      const { data, error } = await supabase.auth.getUser();
+      
+      if (error) {
+        console.error('Error verifying token in createServerClientWithToken:', error);
+        throw error;
+      }
+      
+      if (!data.user) {
+        console.error('No user found after setting token');
+        throw new Error('Authentication failed: Invalid token');
+      }
+      
+      return supabase;
+    } catch (error) {
+      console.error('Error in createServerClientWithToken:', error);
+      throw error;
+    }
   }
 } 

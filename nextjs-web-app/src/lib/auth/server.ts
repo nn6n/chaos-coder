@@ -25,11 +25,17 @@ export async function createClient(cookieStore?: CookieStore) {
         getAll() {
           return cookies.getAll();
         },
-        setAll() {
+        setAll(cookiesToSet) {
           try {
-            // The `setAll` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
+            // If we have a setCookie method available
+            if ('set' in cookies && typeof cookies.set === 'function') {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                (cookies as any).set(name, value, options);
+              });
+            } else {
+              // Log this for debugging but don't throw an error
+              console.log('Cookie setting skipped - no set method available in the cookie store');
+            }
           } catch (e) {
             // Can be safely ignored if using middleware to refresh sessions
             console.warn('Error setting cookies in server client:', e);

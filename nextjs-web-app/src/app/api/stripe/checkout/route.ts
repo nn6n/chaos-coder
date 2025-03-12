@@ -33,17 +33,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 2. Create Supabase client with auth token
-    const supabase = await AuthService.createServerClientWithToken(accessToken);
-    console.log(`🔄 [${requestId}] Created Supabase client`);
+    // 2. Create Supabase client with auth token - with enhanced error handling
+    let supabase;
+    try {
+      supabase = await AuthService.createServerClientWithToken(accessToken);
+      console.log(`✅ [${requestId}] Created Supabase client with auth token successfully`);
+    } catch (authError) {
+      console.error(`❌ [${requestId}] Auth error when creating client:`, authError);
+      return new NextResponse(
+        JSON.stringify({ 
+          error: 'Authentication failed',
+          details: authError instanceof Error ? authError.message : 'Invalid session'
+        }), 
+        { status: 401 }
+      );
+    }
     
+    // Verify user identity
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    console.log(`👤 [${requestId}] Auth check result - User:`, user?.id, 'Error:', userError?.message);
+    console.log(`👤 [${requestId}] Auth check result - User ID:`, user?.id, 'Error:', userError?.message);
     
     if (userError || !user?.id || user.id !== userId) {
-      console.error(`❌ [${requestId}] Auth error:`, userError);
+      console.error(`❌ [${requestId}] Auth validation error:`, userError || 'User ID mismatch');
       return new NextResponse(
-        JSON.stringify({ error: 'Not authenticated' }), 
+        JSON.stringify({ 
+          error: 'User authentication failed',
+          details: userError?.message || 'User ID mismatch'
+        }), 
         { status: 401 }
       );
     }
