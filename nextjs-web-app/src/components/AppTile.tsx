@@ -317,7 +317,7 @@ export default function AppTile({
       </div>
       
       {/* Content area with integrated code preview functionality */}
-      <div className={`overflow-hidden ${isExpanded ? 'h-[600px]' : 'h-[250px]'}`}>
+      <div className={`overflow-hidden h-full`}>
         {isLoading ? (
           <div className="h-full w-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
             <div className="p-6 flex flex-col items-center">

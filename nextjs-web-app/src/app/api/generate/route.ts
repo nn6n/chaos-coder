@@ -83,7 +83,7 @@ export async function POST(req: NextRequest) {
           {
             virtual_key: "groq-virtual-ke-9479cd",
             override_params: {
-              model: "deepseek-r1-distill-qwen-32b",
+              model: "qwen-2.5-coder-32b",
             },
           },
           {
@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
           {
             virtual_key: "openrouter-07e727",
             override_params: {
-              model: "deepseek/deepseek-r1-distill-qwen-32b",
+              model: "qwen/qwen-2.5-coder-32b-instruct",
             },
           },
           {
