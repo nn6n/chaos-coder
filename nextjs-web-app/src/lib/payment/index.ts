@@ -879,12 +879,21 @@ export class PaymentService {
    * Get the site URL based on environment
    */
   private static getSiteUrl(): string {
-    return (
-      process.env.NEXT_PUBLIC_SITE_URL ||
-      (process.env.NEXT_PUBLIC_VERCEL_URL
-        ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
-        : "http://localhost:3000")
-    );
+    // For production, always use the configured site URL
+    const configuredUrl = process.env.NEXT_PUBLIC_SITE_URL;
+    const vercelUrl = process.env.NEXT_PUBLIC_VERCEL_URL 
+      ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`
+      : null;
+    const defaultUrl = "http://localhost:3000";
+    
+    // Log the URLs for debugging
+    console.log(`🔍 Site URL configuration - Configured: ${configuredUrl || 'not set'}, Vercel: ${vercelUrl || 'not set'}`);
+    
+    // Always prioritize the configured URL for production
+    const siteUrl = configuredUrl || vercelUrl || defaultUrl;
+    console.log(`✅ Using site URL: ${siteUrl}`);
+    
+    return siteUrl;
   }
 
   /**
