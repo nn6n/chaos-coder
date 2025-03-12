@@ -2,12 +2,14 @@ import { AuthService } from "@/lib/auth";
 import { addUserCredits } from "@/lib/db-helpers";
 import { NextRequest, NextResponse } from "next/server";
 import { format } from "date-fns";
+import { PaymentService } from "@/lib/payment";
 
 // Test function to simulate a webhook for testing purposes only
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const action = searchParams.get("action");
   const userId = searchParams.get("userId");
+  const tier = searchParams.get("tier") || "pro";
   
   try {
     // Create an admin client to access the database
@@ -118,6 +120,102 @@ export async function GET(req: NextRequest) {
         message: `Simulated upgrade from ${currentTier} to ${newTier} with ${creditsToAdd} credits`,
         before: profileData,
         after: updatedProfile
+      });
+    }
+    
+    // Test subscription change webhook handling
+    if (action === "test-subscription-change") {
+      // We need a userId for this action
+      if (!userId) {
+        return NextResponse.json(
+          { error: "userId is required for test-subscription-change action" },
+          { status: 400 }
+        );
+      }
+      
+      // Get the user's profile
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+      
+      if (profileError) {
+        return NextResponse.json(
+          { error: `Error fetching profile: ${profileError.message}` },
+          { status: 500 }
+        );
+      }
+      
+      // Create a mock subscription object that matches what Stripe would send
+      // Using type assertion to satisfy the type requirements
+      const mockSubscription = {
+        id: profileData.stripe_subscription_id || `sub_test_${Date.now()}`,
+        customer: profileData.stripe_customer_id || `cus_test_${Date.now()}`,
+        status: "active",
+        metadata: {
+          userId: userId,
+          tier: tier
+        },
+        currency: "usd",
+        current_period_start: Math.floor(Date.now() / 1000),
+        current_period_end: Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60), // +30 days
+        
+        // Required properties to satisfy Stripe type
+        object: "subscription",
+        created: Math.floor(Date.now() / 1000),
+        livemode: false,
+        items: {
+          object: "list",
+          data: [],
+          has_more: false,
+          total_count: 0,
+          url: ""
+        },
+        latest_invoice: null
+      } as any; // Using any as a last resort due to complexity of Stripe types
+      
+      console.log("Testing subscription change with mock subscription:", mockSubscription);
+      
+      // Call the handleSubscriptionChange method directly
+      await PaymentService["handleSubscriptionChange"](mockSubscription);
+      
+      // Get the updated profile
+      const { data: updatedProfile, error: updatedProfileError } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+        
+      if (updatedProfileError) {
+        return NextResponse.json(
+          { error: `Error fetching updated profile: ${updatedProfileError.message}` },
+          { status: 500 }
+        );
+      }
+      
+      // Get credit history - using any type due to schema not being fully defined in the Database type
+      let creditHistory = [];
+      try {
+        const { data: creditHistoryData } = await (supabase as any)
+          .from("credit_history")
+          .select("*")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(5);
+          
+        creditHistory = creditHistoryData || [];
+      } catch (err) {
+        console.error("Error fetching credit history:", err);
+      }
+        
+      // Return the results
+      return NextResponse.json({
+        status: "success",
+        message: `Tested subscription change to ${tier}`,
+        before: profileData,
+        after: updatedProfile,
+        creditHistory: creditHistory
       });
     }
     

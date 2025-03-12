@@ -664,6 +664,9 @@ export class PaymentService {
             (tier === 'pro' && currentProfile.subscription_tier === 'free')
           );
         
+        // Log upgrade details
+        console.log(`🔍 Checking for upgrade: Current tier=${currentProfile.subscription_tier}, New tier=${tier}, isUpgrade=${isUpgrade}`);
+        
         // Check if user already received credits today
         const lastCreditRefresh = currentProfile.last_credit_refresh ? new Date(currentProfile.last_credit_refresh) : null;
         const today = new Date();
@@ -672,43 +675,62 @@ export class PaymentService {
           lastCreditRefresh.getMonth() === today.getMonth() &&
           lastCreditRefresh.getFullYear() === today.getFullYear();
         
+        console.log(`🔍 Credit refresh check: lastRefresh=${lastCreditRefresh?.toISOString()}, hasReceivedToday=${hasReceivedCreditsToday}`);
+        
         // If this is an upgrade and user hasn't received credits today, grant them immediate credits
-        if (isUpgrade && !hasReceivedCreditsToday) {
+        if (isUpgrade) {
           console.log(`🔄 Subscription upgrade detected: ${currentProfile.subscription_tier} -> ${tier}`);
-          console.log(`💰 Granting immediate daily credits for tier: ${tier}`);
           
-          // Determine credit amount based on tier
-          const creditAmount = tier === 'ultra' ? 1000 : tier === 'pro' ? 100 : 30;
+          // Also check if credits match the expected amount for the new tier
+          const expectedCredits = tier === 'ultra' ? 1000 : tier === 'pro' ? 100 : 30;
+          const currentCredits = currentProfile.credits || 0;
+          const needsCreditAdjustment = currentCredits < expectedCredits;
           
-          try {
-            // Call the add_user_credits function to add credits and record the transaction
-            const { data: creditsData, error: creditsError } = await addUserCredits(
-              supabase,
-              userId,
-              creditAmount,
-              "plan_upgrade",
-              `Immediate credits grant after upgrading to ${tier} plan`
-            );
+          console.log(`💰 Credit check: current=${currentCredits}, expected=${expectedCredits}, needsAdjustment=${needsCreditAdjustment}`);
+          
+          // Grant credits if either they haven't received today OR if their credits don't match their new tier
+          if (!hasReceivedCreditsToday || needsCreditAdjustment) {
+            console.log(`💰 Granting immediate daily credits for tier: ${tier}`);
             
-            if (creditsError) {
-              console.error("❌ Error granting immediate credits:", creditsError);
-            } else {
-              console.log(`✅ Successfully granted ${creditAmount} credits after plan upgrade. New total: ${creditsData}`);
+            // Determine credit amount based on tier
+            const creditAmount = tier === 'ultra' ? 1000 : tier === 'pro' ? 100 : 30;
+            
+            try {
+              // Call the add_user_credits function to add credits and record the transaction
+              const { data: creditsData, error: creditsError } = await addUserCredits(
+                supabase,
+                userId,
+                creditAmount,
+                "plan_upgrade",
+                `Immediate credits grant after upgrading to ${tier} plan`
+              );
               
-              // Update last_credit_refresh timestamp
-              await supabase
-                .from("profiles")
-                .update({ 
-                  last_credit_refresh: new Date().toISOString(),
-                  updated_at: new Date().toISOString()
-                })
-                .eq("id", userId);
+              if (creditsError) {
+                console.error("❌ Error granting immediate credits:", creditsError);
+              } else {
+                console.log(`✅ Successfully granted ${creditAmount} credits after plan upgrade. New total: ${creditsData}`);
+                
+                // Update last_credit_refresh timestamp
+                const { error: updateError } = await supabase
+                  .from("profiles")
+                  .update({ 
+                    last_credit_refresh: new Date().toISOString(),
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq("id", userId);
+                  
+                if (updateError) {
+                  console.error("❌ Error updating credit refresh timestamp:", updateError);
+                } else {
+                  console.log(`✅ Updated credit refresh timestamp`);
+                }
+              }
+            } catch (err) {
+              console.error("❌ Exception granting immediate credits:", err);
             }
-          } catch (err) {
-            console.error("❌ Exception granting immediate credits:", err);
+          } else {
+            console.log(`ℹ️ User already received credits today and has sufficient credits, skipping immediate credit grant`);
           }
-        } else if (isUpgrade && hasReceivedCreditsToday) {
-          console.log(`ℹ️ User already received credits today, skipping immediate credit grant`);
         }
       }
 
