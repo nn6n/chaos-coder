@@ -9,12 +9,16 @@ export async function POST(req: NextRequest) {
   try {
     // Parse the request body
     const body = await req.json();
-    const { amount, accessToken } = body;
+    const { amount } = body;
 
     // Validate the amount
     if (!amount || amount < 1) {
       return NextResponse.json({ error: 'Invalid amount' }, { status: 400 });
     }
+
+    // Get authentication token from Authorization header or request body
+    const authHeader = req.headers.get('Authorization');
+    const accessToken = authHeader ? authHeader.replace('Bearer ', '') : body.accessToken;
 
     // Validate if access token was provided
     if (!accessToken) {
@@ -22,9 +26,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Access token is required' }, { status: 401 });
     }
     
-    // Use token-based authentication
-    console.log(`🔄 [${requestId}] Using token-based authentication`);
-    const supabase = await AuthService.createServerClientWithToken(accessToken);
+    // Create a server client using cookie store from request
+    const cookieStore = {
+      getAll() {
+        return req.cookies.getAll();
+      }
+    };
+
+    // Create a server client first
+    const supabase = await AuthService.createServerClient(cookieStore);
+    
+    // Set the session with the provided token
+    try {
+      await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: ''
+      });
+      console.log(`✅ [${requestId}] Auth session set with token`);
+    } catch (sessionError) {
+      console.error(`❌ [${requestId}] Failed to set auth session:`, sessionError);
+      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 });
+    }
+    
+    // Verify user authentication
     const { data: { user }, error: userError } = await supabase.auth.getUser();
     
     if (userError || !user) {

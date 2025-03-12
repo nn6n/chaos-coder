@@ -144,28 +144,45 @@ export class AuthService {
    */
   static async createServerClientWithToken(accessToken: string) {
     try {
+      console.log('Creating server client with token...');
+      
+      // Create a new supabase client with proper cookie handling
       const supabase = await createServerClient();
       
-      // Set the session with both access token and refresh token (even if refresh token is empty)
-      await supabase.auth.setSession({ 
-        access_token: accessToken, 
-        refresh_token: '' 
-      });
-      
-      // Immediately verify the session worked by getting the user
-      const { data, error } = await supabase.auth.getUser();
-      
-      if (error) {
-        console.error('Error verifying token in createServerClientWithToken:', error);
-        throw error;
+      // Set the session with both access token and refresh token
+      // This is where the issue occurs - we need to ensure cookies are properly handled
+      try {
+        await supabase.auth.setSession({ 
+          access_token: accessToken, 
+          refresh_token: '' // Empty refresh token is fine for API calls
+        });
+        
+        console.log('Session set successfully with token');
+      } catch (sessionError) {
+        console.error('Error setting session:', sessionError);
+        throw sessionError;
       }
       
-      if (!data.user) {
-        console.error('No user found after setting token');
-        throw new Error('Authentication failed: Invalid token');
+      // Verify the session worked by getting the user
+      try {
+        const { data, error } = await supabase.auth.getUser();
+        
+        if (error) {
+          console.error('Error verifying token in createServerClientWithToken:', error);
+          throw error;
+        }
+        
+        if (!data.user) {
+          console.error('No user found after setting token');
+          throw new Error('Authentication failed: Invalid token');
+        }
+        
+        console.log('User verified successfully:', data.user.id);
+        return supabase;
+      } catch (userError) {
+        console.error('Error getting user after setting token:', userError);
+        throw userError;
       }
-      
-      return supabase;
     } catch (error) {
       console.error('Error in createServerClientWithToken:', error);
       throw error;
