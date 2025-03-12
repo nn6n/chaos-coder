@@ -9,7 +9,8 @@
     "lint": "next lint",
     "deploy": "ts-node deploy.ts",
     "db:migrate": "node scripts/apply-migration.js",
-    "db:schema": "node scripts/apply-schema-updates.js"
+    "db:schema": "node scripts/apply-schema-updates.js",
+    "test:auth": "ts-node scripts/test-auth.ts"
   },
   "dependencies": {
     "@aws-sdk/client-bedrock-runtime": "^3.758.0",

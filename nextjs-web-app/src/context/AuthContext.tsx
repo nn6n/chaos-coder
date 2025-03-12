@@ -1,6 +1,6 @@
 "use client";
 
-import {
+import React, {
   createContext,
   useContext,
   ReactNode,
@@ -9,8 +9,8 @@ import {
   useCallback,
   useRef
 } from "react";
-import { AuthService } from "@/lib/auth";
 import { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
+import { AuthService } from "@/lib/auth/service";
 
 // Define the shape of our AuthContext
 type AuthContextType = {
@@ -157,20 +157,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { user, error } = await AuthService.getCurrentUser(supabase);
 
         if (error) {
-          console.error("AuthContext: Error fetching user:", error);
-          await signOut();
+          // Only log actual errors, not AuthSessionMissingError which is expected
+          if (error instanceof Error && error.name !== 'AuthSessionMissingError') {
+            console.error("AuthContext: Error fetching user:", error);
+          }
+          
+          // For any error, clear the user state
+          if (isMounted) {
+            setUser(null);
+            setIsLoading(false);
+          }
           return;
         }
         
         if (user && isMounted) {
           setUser(user);
           await syncTokensWithDB();
-        } else {
+        } else if (isMounted) {
+          // No user found (not logged in)
+          setUser(null);
         }
       } catch (error) {
-        if (error instanceof Error && error.name !== 'AuthSessionMissingError') {
-          console.error("AuthContext: Unexpected error getting current user:", error);
-        } else {
+        // This shouldn't normally happen since AuthService.getCurrentUser 
+        // already handles errors, but just in case
+        console.error("AuthContext: Unexpected error in checkUser:", error);
+        
+        if (isMounted) {
+          setUser(null);
         }
       } finally {
         if (isMounted) {
