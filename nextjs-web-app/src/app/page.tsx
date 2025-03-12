@@ -137,7 +137,7 @@ export default function Home() {
   // Handle number of generations changes
   const incrementGenerations = () => {
     setNumGenerations((prev) => {
-      const newNum = Math.min(prev + 1, 5); // Cap at 5
+      const newNum = prev + 1;
       
       // Find the next unused style option
       setStyles((current) => {
