@@ -95,7 +95,7 @@ export async function POST(req: NextRequest) {
           {
             virtual_key: "openrouter-07e727",
             override_params: {
-              model: "google/gemini-flash-1.5-8b",
+              model: "deepseek/deepseek-r1-distill-qwen-32b",
             },
           },
           {
