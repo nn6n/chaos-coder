@@ -1,16 +1,19 @@
 import { Portkey } from "portkey-ai";
 import { NextResponse, NextRequest } from "next/server";
-import { createRouteHandlerClient } from '@supabase/auth-helpers-nextjs';
 import { cookies } from 'next/headers';
-import { Database } from "@/types/supabase";
 import { getStylePrompt } from "@/config/styles";
+import { AuthService } from "@/lib/auth";
 
 export const runtime = "edge";
 
 export async function POST(req: NextRequest) {
   try {
-    const cookieStore = cookies();
-    const supabase = createRouteHandlerClient<Database>({ cookies: () => cookieStore });
+    // Use the AuthService to create a server client
+    // We need to await cookies() first to get the cookie store
+    const cookieStore = await cookies();
+    const supabase = await AuthService.createServerClient({
+      getAll: () => cookieStore.getAll()
+    });
     
     // Parse the request body
     const body = await req.json();
