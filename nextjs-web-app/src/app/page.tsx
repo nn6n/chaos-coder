@@ -390,7 +390,7 @@ export default function Home() {
                     </div>
                   ) : (
                     <span className="flex items-center justify-center w-full">
-                      Generate {numGenerations} Website{numGenerations > 1 ? 's' : ''} Now <span className="mx-1">•</span> (
+                      Generate {numGenerations} Website{numGenerations > 1 ? 's' : ''} <span className="mx-1">•</span> (
                       <span className="flex items-center">
                         {numGenerations}
                           <Image

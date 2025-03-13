@@ -80,10 +80,10 @@ export default function PromptInput({
       )}
       <motion.div
         initial={{ y: 0, opacity: 1 }}
-        className="fixed bottom-8 left-1/2 -translate-x-1/2 w-[600px] z-50"
+        className="fixed bottom-4 sm:bottom-8 left-4 right-4 sm:left-1/2 sm:-translate-x-1/2 sm:w-[600px] max-w-full z-50"
       >
       <div className="relative">
-        <form onSubmit={handleSubmit} className="flex gap-2">
+        <form onSubmit={handleSubmit} className="flex flex-col sm:flex-row gap-2">
           <div className="flex-1 relative">
             <div
               className={`absolute left-3 top-1/2 -translate-y-1/2 cursor-pointer z-50 ${
@@ -111,37 +111,39 @@ export default function PromptInput({
               } pointer-events-none`}
             />
           </div>
-          <button
-            type="button"
-            onClick={() => setChaosMode(!chaosMode)}
-            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1 ${
-              chaosMode
-                ? theme === "dark"
-                  ? "bg-purple-700 text-white"
-                  : "bg-purple-500 text-white"
-                : theme === "dark"
-                ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
-                : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-            }`}
-            title={chaosMode ? "Chaos Mode: Update all renders" : "Normal Mode: Update selected render only"}
-          >
-            <FaBolt className={`w-3 h-3 ${chaosMode ? "text-yellow-300" : ""}`} />
-            {chaosMode ? "Chaos" : "Single"}
-          </button>
-          <button
-            type="submit"
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center ${
-              theme === "dark"
-                ? "bg-indigo-600 hover:bg-indigo-700 text-white"
-                : "bg-indigo-500 hover:bg-indigo-600 text-white"
-            }`}
-          >
-            <span>{isUpdateMode ? "Update" : "Generate"}</span>
-            <span className="ml-2 flex items-center">
-              <Image src="/coin.png" alt="Credits" width={16} height={16} className="mr-1" />
-              {calculateCost()}
-            </span>
-          </button>
+          <div className="flex gap-2 sm:flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setChaosMode(!chaosMode)}
+              className={`flex-1 sm:flex-initial px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1 ${
+                chaosMode
+                  ? theme === "dark"
+                    ? "bg-purple-700 text-white"
+                    : "bg-purple-500 text-white"
+                  : theme === "dark"
+                  ? "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                  : "bg-gray-200 text-gray-700 hover:bg-gray-300"
+              }`}
+              title={chaosMode ? "Chaos Mode: Update all renders" : "Normal Mode: Update selected render only"}
+            >
+              <FaBolt className={`w-3 h-3 ${chaosMode ? "text-yellow-300" : ""}`} />
+              <span className="hidden sm:inline">{chaosMode ? "Chaos" : "Single"}</span>
+            </button>
+            <button
+              type="submit"
+              className={`flex-1 sm:flex-initial px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center ${
+                theme === "dark"
+                  ? "bg-indigo-600 hover:bg-indigo-700 text-white"
+                  : "bg-indigo-500 hover:bg-indigo-600 text-white"
+              }`}
+            >
+              <span>{isUpdateMode ? "Update" : "Generate"}</span>
+              <span className="ml-2 flex items-center">
+                <Image src="/coin.png" alt="Credits" width={16} height={16} className="mr-1" />
+                {calculateCost()}
+              </span>
+            </button>
+          </div>
         </form>
       </div>
     </motion.div>
