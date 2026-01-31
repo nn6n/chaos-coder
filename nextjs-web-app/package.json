@@ -13,7 +13,7 @@
     "test:auth": "ts-node scripts/test-auth.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-bedrock-runtime": "^3.758.0",
+    "@aws-sdk/client-bedrock-runtime": "^3.894.0",
     "@e2b/code-interpreter": "^1.0.4",
     "@e2b/sdk": "^0.12.5",
     "@heroicons/react": "^2.2.0",
@@ -34,7 +34,7 @@
     "jotai": "^2.12.1",
     "lucide-react": "^0.477.0",
     "nanoid": "^5.1.2",
-    "next": "15.2.0",
+    "next": "16.1.5",
     "openai": "^4.86.1",
     "portkey-ai": "^1.7.1",
     "react": "^19.0.0",
@@ -55,7 +55,7 @@
     "@types/node": "^20.17.22",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "eslint": "^9",
+    "eslint": "^9.26.0",
     "eslint-config-next": "15.2.0",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
